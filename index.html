@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="es-SV">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SV Life 🇸🇻 — Tu vida en El Salvador</title>
+<meta name="description" content="Asistente digital para la vida cotidiana en El Salvador: clima, IA, trámites, mapa, emergencias, gastos y más.">
+<meta name="theme-color" content="#123a52">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SV Life">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+/* ============================================================
+   SV LIFE — Design tokens
+   Paleta inspirada en el paisaje volcánico y el añil salvadoreño,
+   NO en la bandera. Acento cálido = atardecer sobre el Volcán de Izalco.
+   ============================================================ */
+:root{
+  --sv-blue-900:#0c2233;
+  --sv-blue-700:#123a52;
+  --sv-blue-500:#1b5f83;
+  --sv-teal-500:#158c82;
+  --sv-teal-300:#4fc3b6;
+  --sv-amber-500:#e8935a;
+  --sv-amber-400:#f2b077;
+  --sv-anil-500:#3b4d8b; /* añil, tinte histórico salvadoreño */
+
+  --bg:#f6f8f7;
+  --bg-elevated:#ffffff;
+  --bg-sunken:#eef2f1;
+  --text:#132630;
+  --text-dim:#5b6b72;
+  --border:#e1e8e6;
+  --accent:var(--sv-amber-500);
+  --accent-2:var(--sv-teal-500);
+  --primary:var(--sv-blue-500);
+  --danger:#c0453a;
+  --success:#2f9e6b;
+  --shadow:0 1px 2px rgba(12,34,51,.04), 0 8px 24px -12px rgba(12,34,51,.18);
+  --radius-s:10px;
+  --radius-m:16px;
+  --radius-l:24px;
+  --font-display:'Sora', 'Segoe UI', sans-serif;
+  --font-body:'Inter', 'Segoe UI', sans-serif;
+  --font-mono:'JetBrains Mono', monospace;
+  --nav-h:64px;
+  --topo-line: rgba(27,95,131,.08);
+}
+
+[data-theme="dark"]{
+  --bg:#0b1720;
+  --bg-elevated:#122531;
+  --bg-sunken:#0e1c26;
+  --text:#e9f1f3;
+  --text-dim:#93a7ae;
+  --border:#1e3542;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6);
+  --topo-line: rgba(79,195,182,.08);
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:var(--font-body);
+  background:var(--bg);
+  color:var(--text);
+  -webkit-font-smoothing:antialiased;
+  transition:background .3s ease, color .3s ease;
+  padding-bottom:calc(var(--nav-h) + 16px);
+  min-height:100vh;
+  background-image:
+    radial-gradient(1200px 400px at 100% -10%, var(--topo-line), transparent 60%),
+    radial-gradient(800px 300px at -10% 20%, var(--topo-line), transparent 60%);
+}
+h1,h2,h3,h4{font-family:var(--font-display); margin:0; letter-spacing:-0.01em;}
+p{margin:0;}
+a{color:inherit;}
+button{font-family:var(--font-body);}
+::selection{background:var(--accent); color:#fff;}
+
+.app-shell{max-width:520px; margin:0 auto; position:relative; min-height:100vh;}
+@media (min-width:900px){
+  .app-shell{max-width:1100px;}
+}
+
+/* ---------- Top bar ---------- */
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:18px 18px 6px;
+}
+.topbar .brand{display:flex; align-items:center; gap:8px; font-family:var(--font-display); font-weight:700; font-size:20px;}
+.topbar .brand .flag{font-size:20px;}
+.icon-btn{
+  width:40px; height:40px; border-radius:50%; border:1px solid var(--border);
+  background:var(--bg-elevated); display:flex; align-items:center; justify-content:center;
+  cursor:pointer; box-shadow:var(--shadow); transition:transform .15s ease;
+}
+.icon-btn:active{transform:scale(.92);}
+.topbar-actions{display:flex; gap:8px;}
+
+/* ---------- Views ---------- */
+.view{display:none; padding:8px 16px 24px; animation:fadeUp .35s ease;}
+.view.active{display:block;}
+@keyframes fadeUp{
+  from{opacity:0; transform:translateY(8px);}
+  to{opacity:1; transform:translateY(0);}
+}
+
+/* ---------- Hero / greeting ---------- */
+.hero{
+  position:relative; overflow:hidden;
+  background:linear-gradient(135deg, var(--sv-blue-700), var(--sv-blue-500) 55%, var(--sv-teal-500));
+  color:#fff; border-radius:var(--radius-l); padding:22px 20px 26px; margin:8px 0 18px;
+  box-shadow:var(--shadow);
+}
+.hero .volcano-svg{position:absolute; right:-10px; bottom:-6px; width:190px; opacity:.35; pointer-events:none;}
+.hero h1{font-size:22px; font-weight:700; position:relative; z-index:1;}
+.hero .sub{opacity:.9; font-size:14px; margin-top:4px; position:relative; z-index:1;}
+.hero .weather-line{
+  display:flex; align-items:center; gap:10px; margin-top:16px; position:relative; z-index:1;
+  font-family:var(--font-mono); font-size:15px;
+}
+.hero .weather-line .temp{font-size:26px; font-weight:700; font-family:var(--font-display);}
+.hero .datetime{font-size:12px; opacity:.85; margin-top:2px; position:relative; z-index:1;}
+
+/* ---------- SV AI CTA ---------- */
+.ai-cta{
+  display:flex; align-items:center; gap:12px; background:var(--bg-elevated);
+  border:1px solid var(--border); border-radius:var(--radius-m); padding:14px 16px;
+  margin-bottom:18px; cursor:pointer; box-shadow:var(--shadow); transition:transform .15s ease;
+}
+.ai-cta:active{transform:scale(.98);}
+.ai-cta .bubble{
+  width:42px;height:42px;border-radius:50%; flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),var(--sv-anil-500));
+  display:flex;align-items:center;justify-content:center; font-size:20px;
+}
+.ai-cta strong{display:block; font-size:14.5px;}
+.ai-cta span{font-size:12.5px; color:var(--text-dim);}
+
+/* ---------- Grid of cards ---------- */
+.grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px;}
+@media (min-width:900px){.grid{grid-template-columns:repeat(4,1fr);}}
+.card{
+  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-m);
+  padding:16px; cursor:pointer; box-shadow:var(--shadow); transition:transform .15s ease, box-shadow .15s ease;
+  display:flex; flex-direction:column; gap:6px; min-height:92px; justify-content:space-between;
+}
+.card:active{transform:scale(.96);}
+.card .emoji{font-size:22px;}
+.card strong{font-size:14px; font-weight:600;}
+.card small{color:var(--text-dim); font-size:11.5px;}
+
+.section-title{
+  display:flex; align-items:center; justify-content:space-between; margin:22px 0 10px;
+}
+.section-title h2{font-size:16px;}
+.section-title a{font-size:12.5px; color:var(--accent-2); text-decoration:none; font-weight:600;}
+
+.hscroll{display:flex; gap:12px; overflow-x:auto; padding-bottom:6px; margin:0 -16px; padding-left:16px; padding-right:16px; scrollbar-width:none;}
+.hscroll::-webkit-scrollbar{display:none;}
+.place-card{
+  min-width:200px; background:var(--bg-elevated); border:1px solid var(--border);
+  border-radius:var(--radius-m); overflow:hidden; box-shadow:var(--shadow); flex-shrink:0;
+}
+.place-card .img{height:110px; background-size:cover; background-position:center; background-color:var(--bg-sunken); display:flex;align-items:center;justify-content:center; font-size:34px;}
+.place-card .body{padding:10px 12px;}
+.place-card strong{font-size:13.5px; display:block;}
+.place-card small{color:var(--text-dim); font-size:11.5px;}
+
+/* ---------- Section headers (secondary views) ---------- */
+.view-header{display:flex; align-items:center; gap:10px; padding:16px 16px 4px; position:sticky; top:0; background:var(--bg); z-index:5;}
+.view-header h2{font-size:19px;}
+.back-btn{width:36px;height:36px;border-radius:50%; border:1px solid var(--border); background:var(--bg-elevated); display:flex;align-items:center;justify-content:center; cursor:pointer;}
+
+/* ---------- Bottom nav ---------- */
+.bottom-nav{
+  position:fixed; bottom:0; left:0; right:0; height:var(--nav-h);
+  background:var(--bg-elevated); border-top:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-around; z-index:50;
+  box-shadow:0 -6px 20px -12px rgba(0,0,0,.15);
+}
+.app-shell .bottom-nav{position:fixed; max-width:520px; margin:0 auto; left:0; right:0;}
+@media (min-width:900px){.app-shell .bottom-nav{max-width:1100px;}}
+.nav-item{
+  display:flex; flex-direction:column; align-items:center; gap:2px; background:none; border:none;
+  color:var(--text-dim); font-size:10.5px; cursor:pointer; padding:6px 10px; border-radius:12px; transition:color .15s ease;
+}
+.nav-item .ic{font-size:19px;}
+.nav-item.active{color:var(--primary); font-weight:700;}
+[data-theme="dark"] .nav-item.active{color:var(--sv-teal-300);}
+
+/* ---------- Generic components ---------- */
+.panel{background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-m); padding:16px; margin-bottom:14px; box-shadow:var(--shadow);}
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  background:var(--primary); color:#fff; border:none; border-radius:var(--radius-s);
+  padding:11px 16px; font-weight:600; font-size:14px; cursor:pointer; transition:filter .15s ease, transform .15s ease;
+}
+.btn:active{transform:scale(.97);}
+.btn.secondary{background:var(--bg-sunken); color:var(--text);}
+.btn.danger{background:var(--danger);}
+.btn.full{width:100%;}
+.btn.sm{padding:7px 12px; font-size:12.5px; border-radius:8px;}
+input,select,textarea{
+  width:100%; padding:10px 12px; border-radius:var(--radius-s); border:1px solid var(--border);
+  background:var(--bg); color:var(--text); font-family:var(--font-body); font-size:14px;
+}
+label{font-size:12.5px; color:var(--text-dim); display:block; margin:10px 0 4px;}
+.field{margin-bottom:4px;}
+.row{display:flex; gap:10px;}
+.row > *{flex:1;}
+.badge{display:inline-block; padding:3px 9px; border-radius:99px; font-size:11px; font-weight:600; background:var(--bg-sunken); color:var(--text-dim);}
+.badge.warn{background:#fbe4d8; color:#8a3d1c;}
+[data-theme="dark"] .badge.warn{background:#3a2418; color:#f2b077;}
+.badge.ok{background:#dcf3e6; color:#1c6b45;}
+[data-theme="dark"] .badge.ok{background:#123322; color:#4fc3b6;}
+.divider{height:1px; background:var(--border); margin:14px 0;}
+.empty-state{text-align:center; padding:36px 16px; color:var(--text-dim);}
+.empty-state .emoji{font-size:38px; display:block; margin-bottom:8px;}
+.notice{
+  background:var(--bg-sunken); border:1px dashed var(--border); border-radius:var(--radius-s);
+  padding:10px 12px; font-size:12.5px; color:var(--text-dim); margin-top:8px; display:flex; gap:8px; align-items:flex-start;
+}
+.toast{
+  position:fixed; bottom:calc(var(--nav-h) + 14px); left:50%; transform:translateX(-50%) translateY(20px);
+  background:var(--sv-blue-900); color:#fff; padding:12px 18px; border-radius:99px; font-size:13px;
+  box-shadow:var(--shadow); opacity:0; transition:all .3s ease; z-index:100; pointer-events:none; max-width:88%; text-align:center;
+}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+.spinner{width:22px;height:22px;border-radius:50%; border:3px solid var(--border); border-top-color:var(--accent); animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.skeleton{background:linear-gradient(90deg,var(--bg-sunken) 25%,var(--border) 37%,var(--bg-sunken) 63%); background-size:400% 100%; animation:sk 1.4s ease infinite; border-radius:8px;}
+@keyframes sk{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
+.list-item{display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border);}
+.list-item:last-child{border-bottom:none;}
+
+/* ---------- Emergencias ---------- */
+.emg-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+.emg-card{
+  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-m);
+  padding:18px; text-align:center; cursor:pointer; box-shadow:var(--shadow);
+}
+.emg-card .emoji{font-size:30px; display:block; margin-bottom:8px;}
+.emg-card strong{display:block; font-size:14px;}
+.emg-card .num{font-family:var(--font-mono); color:var(--danger); font-weight:700; font-size:15px; margin-top:4px; display:block;}
+
+/* ---------- Chat SV AI ---------- */
+.chat-wrap{display:flex; flex-direction:column; height:calc(100vh - 130px);}
+.chat-log{flex:1; overflow-y:auto; padding:6px 2px 16px; display:flex; flex-direction:column; gap:10px;}
+.msg{max-width:82%; padding:10px 14px; border-radius:16px; font-size:14px; line-height:1.5;}
+.msg.user{align-self:flex-end; background:var(--primary); color:#fff; border-bottom-right-radius:4px;}
+.msg.ai{align-self:flex-start; background:var(--bg-elevated); border:1px solid var(--border); border-bottom-left-radius:4px;}
+.msg.ai.typing{display:flex; gap:4px; align-items:center; padding:14px;}
+.msg.ai.typing span{width:6px;height:6px;border-radius:50%; background:var(--text-dim); animation:blink 1.2s infinite;}
+.msg.ai.typing span:nth-child(2){animation-delay:.2s;} .msg.ai.typing span:nth-child(3){animation-delay:.4s;}
+@keyframes blink{0%,80%,100%{opacity:.3;}40%{opacity:1;}}
+.chat-suggestions{display:flex; gap:8px; overflow-x:auto; padding:8px 0; scrollbar-width:none;}
+.chip{white-space:nowrap; padding:8px 14px; border-radius:99px; background:var(--bg-elevated); border:1px solid var(--border); font-size:12.5px; cursor:pointer;}
+.chat-input-bar{display:flex; gap:8px; padding:10px 0 4px; background:var(--bg);}
+.chat-input-bar input{flex:1;}
+.chat-input-bar button{width:44px; height:44px; border-radius:50%; background:var(--primary); color:#fff; border:none; font-size:18px; cursor:pointer; flex-shrink:0;}
+
+/* ---------- Map ---------- */
+#map{width:100%; height:340px; border-radius:var(--radius-m); overflow:hidden; border:1px solid var(--border); margin-bottom:14px;}
+.map-filters{display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:6px; scrollbar-width:none;}
+.map-filters .chip.active{background:var(--primary); color:#fff; border-color:var(--primary);}
+
+/* ---------- offline banner ---------- */
+.offline-banner{
+  display:none; background:#fbe4d8; color:#8a3d1c; font-size:12.5px; text-align:center; padding:8px 12px;
+}
+[data-theme="dark"] .offline-banner{background:#3a2418; color:#f2b077;}
+body.is-offline .offline-banner{display:block;}
+
+/* ---------- misc utility ---------- */
+.text-dim{color:var(--text-dim);}
+.mt-8{margin-top:8px;} .mt-16{margin-top:16px;} .mb-8{margin-bottom:8px;}
+.flex-between{display:flex; align-items:center; justify-content:space-between;}
+
+</style>
+</head>
+<body>
+
+<div class="offline-banner" id="offlineBanner">📡 Estás sin conexión. Algunas funciones siguen disponibles.</div>
+
+<div class="app-shell">
+
+  <!-- ============ TOP BAR ============ -->
+  <div class="topbar">
+    <div class="brand"><span class="flag">🇸🇻</span> SV Life</div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="themeToggle" title="Cambiar tema">🌙</button>
+      <button class="icon-btn" id="settingsBtn" title="Ajustes">⚙️</button>
+    </div>
+  </div>
+
+  <!-- ============ VIEW: DASHBOARD ============ -->
+  <section class="view active" id="view-dashboard">
+    <div class="hero">
+      <svg class="volcano-svg" viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0 120 L60 40 L85 70 L120 20 L200 120 Z" fill="#ffffff"/>
+        <circle cx="120" cy="14" r="6" fill="#ffffff" opacity="0.8"/>
+      </svg>
+      <h1 id="greeting">Hola 👋</h1>
+      <p class="sub" id="locationLine">Detectando ubicación…</p>
+      <div class="datetime" id="dateTimeLine">—</div>
+      <div class="weather-line" id="heroWeather">
+        <div class="spinner" style="border-top-color:#fff;"></div>
+        <span>Cargando clima…</span>
+      </div>
+    </div>
+
+    <div class="ai-cta" data-nav="ai">
+      <div class="bubble">🤖</div>
+      <div>
+        <strong>Pregúntale a SV AI</strong>
+        <span>Trámites, turismo, dudas del día a día…</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card" data-nav="clima"><span class="emoji">🌦️</span><strong>Clima</strong><small id="miniWeather">Ver detalle</small></div>
+      <div class="card" data-nav="dinero"><span class="emoji">💵</span><strong>Dinero</strong><small id="miniGastos">Gastos del mes</small></div>
+      <div class="card" data-nav="gasolina"><span class="emoji">⛽</span><strong>Combustible</strong><small>Registrar / historial</small></div>
+      <div class="card" data-nav="calendario"><span class="emoji">📅</span><strong>Mi día</strong><small id="miniEventos">Sin eventos hoy</small></div>
+      <div class="card" data-nav="mapa"><span class="emoji">🗺️</span><strong>Mapa</strong><small>Explorar El Salvador</small></div>
+      <div class="card" data-nav="tramites"><span class="emoji">📄</span><strong>Trámites</strong><small>DUI, NIT, pasaporte…</small></div>
+      <div class="card" data-nav="emergencias" style="border-color:#c0453a;"><span class="emoji">🚨</span><strong>Emergencias</strong><small>Números importantes</small></div>
+      <div class="card" data-nav="turismo"><span class="emoji">🌴</span><strong>Descubre SV</strong><small>Playas, montañas…</small></div>
+    </div>
+
+    <div class="section-title"><h2>🌴 Descubre El Salvador</h2><a data-nav="turismo">Ver todo →</a></div>
+    <div class="hscroll" id="turismoPreview"></div>
+
+    <div class="section-title"><h2>📰 Actualidad <span class="badge warn">Demo</span></h2><a data-nav="noticias">Ver todo →</a></div>
+    <div id="noticiasPreview"></div>
+  </section>
+
+  <!-- ============ VIEW: SV AI ============ -->
+  <section class="view" id="view-ai">
+    <div class="view-header"><h2>🤖 SV AI</h2></div>
+    <div class="chat-wrap">
+      <div class="chat-log" id="chatLog"></div>
+      <div class="chat-suggestions" id="chatSuggestions"></div>
+      <div class="chat-input-bar">
+        <input type="text" id="chatInput" placeholder="Escribe tu pregunta…" autocomplete="off">
+        <button id="chatSend">➤</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VIEW: CLIMA ============ -->
+  <section class="view" id="view-clima">
+    <div class="view-header"><h2>🌦️ Clima</h2></div>
+    <div class="panel">
+      <label>Ubicación</label>
+      <select id="citySelect">
+        <option value="auto">📍 Usar mi ubicación</option>
+        <option value="San Salvador,13.6929,-89.2182">San Salvador</option>
+        <option value="Santa Ana,13.9942,-89.5592">Santa Ana</option>
+        <option value="San Miguel,13.4833,-88.1833">San Miguel</option>
+        <option value="La Libertad,13.4883,-89.3222">La Libertad</option>
+        <option value="Sonsonate,13.7186,-89.7244">Sonsonate</option>
+        <option value="Usulután,13.3500,-88.4500">Usulután</option>
+        <option value="La Paz (Zacatecoluca),13.5083,-88.8667">La Paz (Zacatecoluca)</option>
+        <option value="Chalatenango,14.0333,-88.9333">Chalatenango</option>
+        <option value="Morazán (San Francisco Gotera),13.7000,-88.1000">Morazán</option>
+        <option value="Ahuachapán,13.9214,-89.8450">Ahuachapán</option>
+        <option value="Cabañas (Sensuntepeque),13.8747,-88.6353">Cabañas</option>
+        <option value="Cuscatlán (Cojutepeque),13.7167,-88.9333">Cuscatlán</option>
+        <option value="La Unión,13.3369,-87.8442">La Unión</option>
+        <option value="San Vicente,13.6425,-88.7833">San Vicente</option>
+      </select>
+    </div>
+    <div id="climaContent"></div>
+  </section>
+
+  <!-- ============ VIEW: DINERO ============ -->
+  <section class="view" id="view-dinero">
+    <div class="view-header"><h2>💵 Dinero</h2></div>
+    <div class="panel">
+      <div class="flex-between">
+        <div><small class="text-dim">Gasto de este mes</small><h2 id="totalMes">$0.00</h2></div>
+        <button class="btn sm" id="btnPresupuesto">Presupuesto</button>
+      </div>
+      <div id="budgetBar" class="mt-8"></div>
+    </div>
+    <form class="panel" id="formGasto">
+      <div class="row">
+        <div class="field"><label>Monto (USD)</label><input type="number" step="0.01" min="0" id="gastoMonto" required></div>
+        <div class="field"><label>Categoría</label>
+          <select id="gastoCategoria">
+            <option value="🍔 Comida">🍔 Comida</option>
+            <option value="⛽ Transporte">⛽ Transporte</option>
+            <option value="🎓 Estudios">🎓 Estudios</option>
+            <option value="🏠 Casa">🏠 Casa</option>
+            <option value="🎮 Entretenimiento">🎮 Entretenimiento</option>
+            <option value="🛍️ Compras">🛍️ Compras</option>
+            <option value="📱 Tecnología">📱 Tecnología</option>
+            <option value="💳 Otros">💳 Otros</option>
+          </select>
+        </div>
+      </div>
+      <label>Descripción (opcional)</label>
+      <input type="text" id="gastoDesc" placeholder="Ej. Almuerzo, pasaje de bus…">
+      <button class="btn full mt-16" type="submit">➕ Registrar gasto</button>
+    </form>
+    <div class="section-title"><h2>Historial</h2></div>
+    <div id="gastosList"></div>
+  </section>
+
+  <!-- ============ VIEW: GASOLINA ============ -->
+  <section class="view" id="view-gasolina">
+    <div class="view-header"><h2>⛽ Combustible</h2></div>
+    <div class="grid" style="grid-template-columns:1fr 1fr 1fr;">
+      <div class="panel" style="text-align:center;"><small class="text-dim">Este mes</small><br><strong id="fuelMes">$0.00</strong></div>
+      <div class="panel" style="text-align:center;"><small class="text-dim">Promedio/galón</small><br><strong id="fuelProm">$0.00</strong></div>
+      <div class="panel" style="text-align:center;"><small class="text-dim">Rendimiento</small><br><strong id="fuelRend">— km/gal</strong></div>
+    </div>
+    <form class="panel" id="formGasolina">
+      <div class="row">
+        <div class="field"><label>Precio por galón</label><input type="number" step="0.001" min="0" id="fPrecio" required></div>
+        <div class="field"><label>Galones comprados</label><input type="number" step="0.01" min="0" id="fGalones" required></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Kilometraje actual</label><input type="number" step="1" min="0" id="fKm" placeholder="Odómetro"></div>
+        <div class="field"><label>Vehículo</label><input type="text" id="fVehiculo" placeholder="Ej. Toyota Yaris"></div>
+      </div>
+      <label>Fecha</label>
+      <input type="date" id="fFecha">
+      <button class="btn full mt-16" type="submit">⛽ Registrar</button>
+    </form>
+    <div id="fuelChart" class="panel"></div>
+    <div class="section-title"><h2>Historial</h2></div>
+    <div id="fuelList"></div>
+  </section>
+
+  <!-- ============ VIEW: CALENDARIO ============ -->
+  <section class="view" id="view-calendario">
+    <div class="view-header"><h2>📅 Mi día</h2></div>
+    <form class="panel" id="formEvento">
+      <div class="row">
+        <div class="field"><label>Hora</label><input type="time" id="evHora" required></div>
+        <div class="field"><label>Fecha</label><input type="date" id="evFecha" required></div>
+      </div>
+      <label>Título</label>
+      <input type="text" id="evTitulo" placeholder="Ej. Universidad, almuerzo…" required>
+      <label>Tipo</label>
+      <select id="evTipo">
+        <option value="evento">📌 Evento</option>
+        <option value="tarea">✅ Tarea</option>
+        <option value="recordatorio">⏰ Recordatorio</option>
+      </select>
+      <button class="btn full mt-16" type="submit">➕ Agregar</button>
+    </form>
+    <div class="section-title"><h2>Próximos</h2></div>
+    <div id="eventosList"></div>
+  </section>
+
+  <!-- ============ VIEW: MAPA ============ -->
+  <section class="view" id="view-mapa">
+    <div class="view-header"><h2>🗺️ Explorar El Salvador</h2></div>
+    <div class="map-filters" id="mapFilters">
+      <div class="chip active" data-cat="all">Todo</div>
+      <div class="chip" data-cat="hospital">🏥 Hospitales</div>
+      <div class="chip" data-cat="restaurant">🍽️ Restaurantes</div>
+      <div class="chip" data-cat="fuel">⛽ Gasolineras</div>
+      <div class="chip" data-cat="bank">🏦 Bancos</div>
+      <div class="chip" data-cat="supermarket">🛒 Supermercados</div>
+      <div class="chip" data-cat="tourism">🌴 Turismo</div>
+    </div>
+    <div id="map"></div>
+    <div class="row">
+      <input type="text" id="mapSearch" placeholder="Buscar lugar en El Salvador…">
+      <button class="btn" id="mapSearchBtn">Buscar</button>
+    </div>
+    <div id="mapResults" class="mt-16"></div>
+  </section>
+
+  <!-- ============ VIEW: TRAMITES ============ -->
+  <section class="view" id="view-tramites">
+    <div class="view-header"><h2>📄 Trámites</h2></div>
+    <div id="tramitesList"></div>
+  </section>
+
+  <!-- ============ VIEW: EMERGENCIAS ============ -->
+  <section class="view" id="view-emergencias">
+    <div class="view-header"><h2>🚨 Emergencias</h2></div>
+    <div class="notice">⚠️ Utiliza estos números únicamente para emergencias reales. El mal uso de las líneas de emergencia puede ser sancionado por la ley.</div>
+    <div class="emg-grid mt-16" id="emergenciasGrid"></div>
+  </section>
+
+  <!-- ============ VIEW: TURISMO ============ -->
+  <section class="view" id="view-turismo">
+    <div class="view-header"><h2>🌴 Descubre El Salvador</h2></div>
+    <div class="map-filters" id="turismoFilters">
+      <div class="chip active" data-cat="all">Todo</div>
+      <div class="chip" data-cat="playas">🏖️ Playas</div>
+      <div class="chip" data-cat="montanas">⛰️ Montañas</div>
+      <div class="chip" data-cat="pueblos">🏘️ Pueblos</div>
+      <div class="chip" data-cat="miradores">🔭 Miradores</div>
+      <div class="chip" data-cat="historicos">🏛️ Históricos</div>
+    </div>
+    <div id="turismoGrid" class="grid" style="grid-template-columns:1fr 1fr;"></div>
+  </section>
+
+  <!-- ============ VIEW: NOTICIAS ============ -->
+  <section class="view" id="view-noticias">
+    <div class="view-header"><h2>📰 Actualidad</h2></div>
+    <div class="notice">Sección lista para conectarse a una API de noticias real. Mientras tanto se muestra contenido de demostración.</div>
+    <div id="noticiasList" class="mt-16"></div>
+  </section>
+
+  <!-- ============ VIEW: AJUSTES ============ -->
+  <section class="view" id="view-ajustes">
+    <div class="view-header"><h2>⚙️ Ajustes</h2></div>
+    <div class="panel">
+      <div class="flex-between"><span>Nombre para el saludo</span></div>
+      <input type="text" id="settingName" placeholder="Tu nombre" class="mt-8">
+      <button class="btn full mt-16" id="saveName">Guardar</button>
+    </div>
+    <div class="panel">
+      <div class="flex-between"><strong>🎨 Tema</strong>
+        <select id="themeSelect" style="width:auto;">
+          <option value="light">Claro</option>
+          <option value="dark">Oscuro</option>
+          <option value="system">Automático</option>
+        </select>
+      </div>
+    </div>
+    <div class="panel">
+      <strong>🔑 Claves de API</strong>
+      <p class="text-dim mt-8" style="font-size:12.5px;">Estas claves se guardan solo en este dispositivo (localStorage) y nunca se envían a ningún servidor de SV Life.</p>
+      <label>Gemini API Key</label>
+      <input type="password" id="geminiKey" placeholder="AIza...">
+      <label>OpenWeather API Key</label>
+      <input type="password" id="owKey" placeholder="Tu clave de OpenWeather">
+      <button class="btn full mt-16" id="saveKeys">Guardar claves</button>
+      <div class="notice">¿No tienes claves? SV AI y el clima funcionarán en modo demo con datos simulados hasta que las configures.</div>
+    </div>
+    <div class="panel">
+      <strong>🗑️ Datos locales</strong>
+      <p class="text-dim mt-8" style="font-size:12.5px;">Gastos, gasolina, eventos y chat se guardan en este dispositivo.</p>
+      <button class="btn danger full mt-16" id="btnResetData">Borrar todos mis datos</button>
+    </div>
+    <div class="panel" style="text-align:center;">
+      <small class="text-dim">SV Life 🇸🇻 · v1.0.0<br>Hecho para la vida cotidiana en El Salvador</small>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============ BOTTOM NAV ============ -->
+<nav class="bottom-nav">
+  <button class="nav-item active" data-nav="dashboard"><span class="ic">🏠</span>Inicio</button>
+  <button class="nav-item" data-nav="ai"><span class="ic">🤖</span>SV AI</button>
+  <button class="nav-item" data-nav="mapa"><span class="ic">🗺️</span>Mapa</button>
+  <button class="nav-item" data-nav="calendario"><span class="ic">📅</span>Mi día</button>
+  <button class="nav-item" data-nav="ajustes"><span class="ic">⚙️</span>Ajustes</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ============================================================
+   SV LIFE — Configuración
+   ------------------------------------------------------------
+   Aquí se definen valores por defecto. Las claves de API reales
+   NUNCA se escriben en este archivo: el usuario las ingresa una
+   vez desde Ajustes ⚙️ y quedan guardadas solo en su navegador
+   (localStorage), nunca se suben a ningún repositorio ni servidor.
+
+   Si prefieres no escribir tu clave en el navegador (por ejemplo,
+   en un teléfono compartido), usa el mini-backend opcional que
+   se incluye en /backend (ver README.md).
+   ============================================================ */
+
+const SV_CONFIG = {
+  APP_NAME: "SV Life",
+
+  // Si usas el backend opcional (/backend), pon aquí su URL, ej:
+  // "https://tu-dominio.com/backend" — así la clave de Gemini
+  // nunca viaja al navegador. Déjalo vacío para modo 100% frontend.
+  BACKEND_URL: "",
+
+  // Modelo de Gemini a utilizar
+  GEMINI_MODEL: "gemini-2.0-flash",
+
+  // Coordenadas por defecto (Plaza Cívica, San Salvador) si no hay geolocalización
+  DEFAULT_LOCATION: { name: "San Salvador", lat: 13.6929, lon: -89.2182 },
+
+  // Números de emergencia de El Salvador — EDITA AQUÍ si cambian.
+  // Fuente sugerida para verificar: sitios oficiales de PNC, Cuerpo de
+  // Bomberos y Cruz Roja Salvadoreña.
+  EMERGENCY_NUMBERS: [
+    { label: "Emergencias (PNC / general)", number: "911", emoji: "🚨" },
+    { label: "Policía Nacional Civil", number: "911", emoji: "👮" },
+    { label: "Cuerpo de Bomberos", number: "913", emoji: "🚒" },
+    { label: "Cruz Roja Salvadoreña", number: "2222-5155", emoji: "🩹" },
+    { label: "Fuerza Armada (COMURES/emergencia)", number: "911", emoji: "🎖️" }
+  ]
+};
+
+function svGetKeys() {
+  return {
+    gemini: localStorage.getItem("sv_gemini_key") || "",
+    openweather: localStorage.getItem("sv_ow_key") || ""
+  };
+}
+function svSaveKeys(gemini, openweather) {
+  if (gemini !== undefined) localStorage.setItem("sv_gemini_key", gemini);
+  if (openweather !== undefined) localStorage.setItem("sv_ow_key", openweather);
+}
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — Datos de contenido
+   Los trámites incluyen SOLO información general y estable
+   (qué es, para qué sirve, institución). Requisitos y costos
+   cambian con frecuencia: siempre se marcan para verificar en
+   la fuente oficial en vez de inventarse.
+   ============================================================ */
+
+const SV_TRAMITES = [
+  {
+    id: "dui",
+    emoji: "🪪",
+    nombre: "DUI (Documento Único de Identidad)",
+    que_es: "Documento oficial de identificación para todos los salvadoreños mayores de edad.",
+    para_que: "Identificarte legalmente, votar, abrir cuentas bancarias, firmar contratos y más.",
+    institucion: "RNPN (Registro Nacional de las Personas Naturales)",
+    enlace: "https://www.rnpn.gob.sv",
+    verificar: true
+  },
+  {
+    id: "nit",
+    emoji: "🧾",
+    nombre: "NIT (Número de Identificación Tributaria)",
+    que_es: "Número que te identifica ante el Ministerio de Hacienda para fines fiscales.",
+    para_que: "Trabajar formalmente, facturar, declarar impuestos y realizar trámites tributarios.",
+    institucion: "Ministerio de Hacienda",
+    enlace: "https://www.mh.gob.sv",
+    verificar: true
+  },
+  {
+    id: "pasaporte",
+    emoji: "🛂",
+    nombre: "Pasaporte",
+    que_es: "Documento de viaje internacional que te identifica fuera del país.",
+    para_que: "Viajar al extranjero y como identificación adicional.",
+    institucion: "Dirección General de Migración y Extranjería (DGME)",
+    enlace: "https://www.migracion.gob.sv",
+    verificar: true
+  },
+  {
+    id: "licencia",
+    emoji: "🚗",
+    nombre: "Licencia de conducir",
+    que_es: "Autorización legal para conducir vehículos según la categoría obtenida.",
+    para_que: "Conducir de forma legal en El Salvador.",
+    institucion: "VMT (Vice Ministerio de Transporte) / SERTRACEN",
+    enlace: "https://www.vmt.gob.sv",
+    verificar: true
+  },
+  {
+    id: "matricula",
+    emoji: "🚙",
+    nombre: "Matrícula vehicular",
+    que_es: "Trámite de registro e impuesto anual de circulación de un vehículo.",
+    para_que: "Circular legalmente y renovar la tarjeta de circulación.",
+    institucion: "VMT / SERTRACEN",
+    enlace: "https://www.vmt.gob.sv",
+    verificar: true
+  },
+  {
+    id: "solvencias",
+    emoji: "📃",
+    nombre: "Solvencias",
+    que_es: "Constancias que certifican que estás al día con una institución (municipal, PNC, etc.).",
+    para_que: "Requisito para muchos trámites legales, laborales o de viaje.",
+    institucion: "Alcaldía municipal / PNC / otras según el tipo",
+    enlace: "https://www.gobiernoabierto.gob.sv",
+    verificar: true
+  },
+  {
+    id: "antecedentes",
+    emoji: "🔍",
+    nombre: "Antecedentes penales / policiales",
+    que_es: "Constancia que certifica si tienes o no registros penales o policiales.",
+    para_que: "Trámites laborales, migratorios o legales que lo requieran.",
+    institucion: "Policía Nacional Civil (PNC)",
+    enlace: "https://www.pnc.gob.sv",
+    verificar: true
+  },
+  {
+    id: "otros",
+    emoji: "🏛️",
+    nombre: "Otros trámites gubernamentales",
+    que_es: "Portal centralizado con distintos trámites del Gobierno de El Salvador.",
+    para_que: "Consultar y realizar trámites en línea de varias instituciones.",
+    institucion: "Gobierno de El Salvador",
+    enlace: "https://www.gobiernoabierto.gob.sv",
+    verificar: true
+  }
+];
+
+const SV_TURISMO = [
+  { id:1, cat:"playas", emoji:"🏖️", nombre:"El Tunco", desc:"Playa icónica para surfear, con ambiente bohemio y buena gastronomía.", lat:13.4926, lon:-89.3833 },
+  { id:2, cat:"playas", emoji:"🏖️", nombre:"El Sunzal", desc:"Playa de olas suaves, ideal para aprender a surfear.", lat:13.4958, lon:-89.3708 },
+  { id:3, cat:"playas", emoji:"🏖️", nombre:"Playa Los Cóbanos", desc:"Zona de arrecife coralino y aguas tranquilas para nadar.", lat:13.5233, lon:-89.7936 },
+  { id:4, cat:"montanas", emoji:"⛰️", nombre:"Volcán de Izalco", desc:"Volcán conocido como 'Faro del Pacífico', dentro del Parque Nacional Los Volcanes.", lat:13.8144, lon:-89.6331 },
+  { id:5, cat:"montanas", emoji:"⛰️", nombre:"Cerro Verde", desc:"Mirador natural con vista al Izalco y al lago de Coatepeque.", lat:13.8125, lon:-89.6300 },
+  { id:6, cat:"montanas", emoji:"⛰️", nombre:"Volcán de Santa Ana (Ilamatepec)", desc:"El volcán más alto del país, con laguna cratérica turquesa.", lat:13.8536, lon:-89.6297 },
+  { id:7, cat:"pueblos", emoji:"🏘️", nombre:"Suchitoto", desc:"Pueblo colonial junto al lago Suchitlán, arte y cultura.", lat:13.9383, lon:-89.0286 },
+  { id:8, cat:"pueblos", emoji:"🏘️", nombre:"Ataco (Concepción de Ataco)", desc:"Pueblo de la Ruta de las Flores, murales y café de altura.", lat:13.8722, lon:-89.8500 },
+  { id:9, cat:"pueblos", emoji:"🏘️", nombre:"Juayúa", desc:"Conocido por su feria gastronómica de fin de semana.", lat:13.8419, lon:-89.7539 },
+  { id:10, cat:"miradores", emoji:"🔭", nombre:"Puerta del Diablo", desc:"Formación rocosa con vistas panorámicas hacia el lago de Ilopango.", lat:13.6167, lon:-89.1408 },
+  { id:11, cat:"miradores", emoji:"🔭", nombre:"Mirador Los Pintos", desc:"Vista privilegiada del Volcán de San Salvador.", lat:13.7333, lon:-89.2833 },
+  { id:12, cat:"historicos", emoji:"🏛️", nombre:"Sitio arqueológico Joya de Cerén", desc:"Patrimonio de la Humanidad UNESCO, 'la Pompeya de América'.", lat:13.8228, lon:-89.3606 },
+  { id:13, cat:"historicos", emoji:"🏛️", nombre:"Centro Histórico de San Salvador", desc:"Catedral Metropolitana, Palacio Nacional y Teatro Nacional.", lat:13.6989, lon:-89.1914 },
+  { id:14, cat:"historicos", emoji:"🏛️", nombre:"Ruinas de Tazumal", desc:"Complejo arqueológico maya en Chalchuapa.", lat:13.9758, lon:-89.6797 }
+];
+
+const SV_NOTICIAS_DEMO = [
+  { titulo:"Bienvenido a la sección de Actualidad", resumen:"Aquí verás noticias relevantes de El Salvador una vez que conectes una API de noticias real.", fuente:"SV Life", demo:true },
+  { titulo:"Configura tu fuente de noticias", resumen:"Edita js/noticias.js para conectar una API (por ejemplo NewsAPI o una fuente local) y reemplazar este contenido de demostración.", fuente:"SV Life", demo:true },
+  { titulo:"Recuerda verificar fuentes oficiales", resumen:"Para trámites, emergencias o información legal, siempre confirma en el sitio oficial correspondiente.", fuente:"SV Life", demo:true }
+];
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — Almacenamiento local (localStorage)
+   Capa mínima para leer/escribir listas JSON por clave.
+   ============================================================ */
+const svStore = {
+  get(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : (fallback ?? []);
+    } catch (e) {
+      console.warn("svStore.get error", key, e);
+      return fallback ?? [];
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (e) {
+      console.warn("svStore.set error", key, e);
+      return false;
+    }
+  },
+  push(key, item) {
+    const arr = svStore.get(key, []);
+    arr.unshift(item);
+    svStore.set(key, arr);
+    return arr;
+  },
+  remove(key, predicateId) {
+    const arr = svStore.get(key, []).filter(i => i.id !== predicateId);
+    svStore.set(key, arr);
+    return arr;
+  },
+  clearAll() {
+    ["sv_gastos", "sv_fuel", "sv_eventos", "sv_chat", "sv_budget", "sv_name"]
+      .forEach(k => localStorage.removeItem(k));
+  }
+};
+
+function svUid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+function svToast(msg, ms = 2600) {
+  const t = document.getElementById("toast");
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(svToast._h);
+  svToast._h = setTimeout(() => t.classList.remove("show"), ms);
+}
+function svFmtUSD(n) {
+  return "$" + (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — App core: navegación, tema, saludo y arranque
+   ============================================================ */
+(function () {
+  "use strict";
+
+  // ---------- Navegación entre vistas ----------
+  function goTo(viewId) {
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    const target = document.getElementById("view-" + viewId);
+    if (target) target.classList.add("active");
+    document.querySelectorAll(".nav-item").forEach(n => {
+      n.classList.toggle("active", n.dataset.nav === viewId);
+    });
+    window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+    if (viewId === "mapa" && window.svInitMap) window.svInitMap();
+    if (viewId === "ai" && window.svInitChat) window.svInitChat();
+    location.hash = viewId;
+  }
+  window.svGoTo = goTo;
+
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest("[data-nav]");
+    if (el) goTo(el.dataset.nav);
+  });
+
+  window.addEventListener("hashchange", () => {
+    const id = location.hash.replace("#", "");
+    if (id) goTo(id);
+  });
+
+  // ---------- Tema claro/oscuro ----------
+  function applyTheme(mode) {
+    const real = mode === "system"
+      ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+      : mode;
+    document.documentElement.setAttribute("data-theme", real);
+    document.getElementById("themeToggle").textContent = real === "dark" ? "☀️" : "🌙";
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", real === "dark" ? "#0b1720" : "#123a52");
+  }
+  function getThemePref() {
+    return localStorage.getItem("sv_theme") || "system";
+  }
+  function setThemePref(mode) {
+    localStorage.setItem("sv_theme", mode);
+    applyTheme(mode);
+    const sel = document.getElementById("themeSelect");
+    if (sel) sel.value = mode;
+  }
+  document.getElementById("themeToggle").addEventListener("click", () => {
+    const current = document.documentElement.getAttribute("data-theme");
+    setThemePref(current === "dark" ? "light" : "dark");
+  });
+  document.getElementById("themeSelect").addEventListener("change", (e) => setThemePref(e.target.value));
+
+  // ---------- Saludo + fecha/hora ----------
+  function updateGreeting() {
+    const name = localStorage.getItem("sv_name") || "";
+    const h = new Date().getHours();
+    const saludo = h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
+    document.getElementById("greeting").textContent = `${saludo}${name ? ", " + name : ""} 👋`;
+  }
+  function updateClock() {
+    const now = new Date();
+    const fecha = now.toLocaleDateString("es-SV", { weekday: "long", day: "numeric", month: "long" });
+    const hora = now.toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+    document.getElementById("dateTimeLine").textContent = `${fecha.charAt(0).toUpperCase() + fecha.slice(1)} · ${hora}`;
+  }
+
+  // ---------- Ajustes: nombre y claves ----------
+  function loadSettingsForm() {
+    document.getElementById("settingName").value = localStorage.getItem("sv_name") || "";
+    const keys = svGetKeys();
+    document.getElementById("geminiKey").value = keys.gemini;
+    document.getElementById("owKey").value = keys.openweather;
+    document.getElementById("themeSelect").value = getThemePref();
+  }
+  document.getElementById("saveName").addEventListener("click", () => {
+    localStorage.setItem("sv_name", document.getElementById("settingName").value.trim());
+    updateGreeting();
+    svToast("Nombre guardado ✅");
+  });
+  document.getElementById("saveKeys").addEventListener("click", () => {
+    svSaveKeys(document.getElementById("geminiKey").value.trim(), document.getElementById("owKey").value.trim());
+    svToast("Claves guardadas en este dispositivo 🔒");
+    if (window.svRefreshWeather) window.svRefreshWeather();
+  });
+  document.getElementById("btnResetData").addEventListener("click", () => {
+    if (confirm("¿Seguro que deseas borrar todos tus datos guardados en este dispositivo? Esta acción no se puede deshacer.")) {
+      svStore.clearAll();
+      svToast("Datos borrados 🗑️");
+      location.reload();
+    }
+  });
+  document.getElementById("settingsBtn").addEventListener("click", () => goTo("ajustes"));
+
+  // ---------- Detección de conexión ----------
+  function updateOnlineStatus() {
+    document.body.classList.toggle("is-offline", !navigator.onLine);
+  }
+  window.addEventListener("online", updateOnlineStatus);
+  window.addEventListener("offline", updateOnlineStatus);
+
+  // ---------- Service worker + instalación PWA ----------
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("service-worker.js").catch(err => console.warn("SW error", err));
+    });
+  }
+  let deferredInstallPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    svToast("💡 Puedes instalar SV Life desde el menú ⋮ o el ícono de instalar del navegador");
+  });
+  window.svTriggerInstall = async function () {
+    if (!deferredInstallPrompt) {
+      svToast("Usa el menú del navegador → 'Instalar aplicación'");
+      return;
+    }
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+  };
+
+  // ---------- Inicio ----------
+  function init() {
+    applyTheme(getThemePref());
+    updateGreeting();
+    updateClock();
+    setInterval(updateClock, 30000);
+    loadSettingsForm();
+    updateOnlineStatus();
+
+    const startView = location.hash ? location.hash.replace("#", "") : "dashboard";
+    goTo(document.getElementById("view-" + startView) ? startView : "dashboard");
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+})();
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — Clima (OpenWeather + Geolocation API)
+   Si no hay clave de OpenWeather configurada, se muestra un
+   estado de demostración claramente identificado, nunca datos
+   inventados presentados como reales.
+   ============================================================ */
+(function () {
+  "use strict";
+
+  const WEATHER_ICONS = {
+    "01d": "☀️", "01n": "🌕", "02d": "🌤️", "02n": "☁️", "03d": "☁️", "03n": "☁️",
+    "04d": "☁️", "04n": "☁️", "09d": "🌧️", "09n": "🌧️", "10d": "🌦️", "10n": "🌧️",
+    "11d": "⛈️", "11n": "⛈️", "13d": "❄️", "13n": "❄️", "50d": "🌫️", "50n": "🌫️"
+  };
+
+  let lastCoords = null;
+
+  async function fetchOpenWeather(lat, lon) {
+    const key = svGetKeys().openweather;
+    if (!key) return null;
+    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&lang=es&appid=${key}`;
+    const fUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&lang=es&appid=${key}`;
+    const [cur, fc] = await Promise.all([fetch(url), fetch(fUrl)]);
+    if (!cur.ok) throw new Error("OpenWeather: " + cur.status);
+    const curData = await cur.json();
+    const fcData = fc.ok ? await fc.json() : null;
+    return { current: curData, forecast: fcData };
+  }
+
+  function demoWeather(cityName) {
+    return {
+      demo: true,
+      name: cityName || "San Salvador",
+      temp: 27, feels_like: 30, humidity: 65, wind: 9,
+      desc: "Parcialmente nublado", icon: "02d"
+    };
+  }
+
+  function renderHero(w) {
+    const heroEl = document.getElementById("heroWeather");
+    const mini = document.getElementById("miniWeather");
+    if (!w) {
+      heroEl.innerHTML = `<span>No se pudo cargar el clima</span>`;
+      return;
+    }
+    const icon = WEATHER_ICONS[w.icon] || "🌡️";
+    heroEl.innerHTML = `<span style="font-size:22px;">${icon}</span><span class="temp">${Math.round(w.temp)}°C</span><span>${w.desc}</span>`;
+    document.getElementById("locationLine").textContent = `${w.name}${w.demo ? " · demo" : ""}`;
+    mini.textContent = `${Math.round(w.temp)}°C · ${w.desc}`;
+  }
+
+  function renderClimaView(w, forecast) {
+    const el = document.getElementById("climaContent");
+    if (!w) {
+      el.innerHTML = `<div class="empty-state"><span class="emoji">🌦️</span>No se pudo obtener el clima.</div>`;
+      return;
+    }
+    const icon = WEATHER_ICONS[w.icon] || "🌡️";
+    let html = `
+      <div class="panel" style="text-align:center;">
+        <div style="font-size:44px;">${icon}</div>
+        <h2 style="font-size:32px;">${Math.round(w.temp)}°C</h2>
+        <p class="text-dim">${w.desc} · ${w.name}</p>
+        ${w.demo ? `<span class="badge warn mt-8">Datos de demostración — configura tu clave OpenWeather en Ajustes</span>` : ""}
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;">
+        <div class="panel"><small class="text-dim">Sensación térmica</small><h3>${Math.round(w.feels_like)}°C</h3></div>
+        <div class="panel"><small class="text-dim">Humedad</small><h3>${w.humidity}%</h3></div>
+        <div class="panel"><small class="text-dim">Viento</small><h3>${w.wind} km/h</h3></div>
+        <div class="panel"><small class="text-dim">Actualizado</small><h3 style="font-size:14px;">${new Date().toLocaleTimeString("es-SV",{hour:'2-digit',minute:'2-digit'})}</h3></div>
+      </div>`;
+    if (forecast && forecast.list) {
+      const days = {};
+      forecast.list.forEach(item => {
+        const d = item.dt_txt.split(" ")[0];
+        if (!days[d]) days[d] = item;
+      });
+      const arr = Object.values(days).slice(0, 5);
+      html += `<div class="section-title"><h2>Próximos días</h2></div><div class="hscroll">`;
+      arr.forEach(item => {
+        const date = new Date(item.dt_txt);
+        const dayName = date.toLocaleDateString("es-SV", { weekday: "short" });
+        const ic = WEATHER_ICONS[item.weather[0].icon] || "🌡️";
+        html += `<div class="place-card" style="min-width:110px;">
+          <div class="body" style="text-align:center;">
+            <strong style="text-transform:capitalize;">${dayName}</strong>
+            <div style="font-size:26px;margin:6px 0;">${ic}</div>
+            <small>${Math.round(item.main.temp_max)}° / ${Math.round(item.main.temp_min)}°</small>
+          </div></div>`;
+      });
+      html += `</div>`;
+    } else if (w.demo) {
+      html += `<div class="notice">📅 El pronóstico de varios días requiere una clave de OpenWeather válida.</div>`;
+    }
+    el.innerHTML = html;
+  }
+
+  async function loadWeather(lat, lon, cityName) {
+    try {
+      const data = await fetchOpenWeather(lat, lon);
+      if (!data) {
+        const demo = demoWeather(cityName);
+        renderHero(demo);
+        renderClimaView(demo, null);
+        return;
+      }
+      const c = data.current;
+      const w = {
+        name: cityName || c.name,
+        temp: c.main.temp, feels_like: c.main.feels_like,
+        humidity: c.main.humidity, wind: Math.round(c.wind.speed * 3.6),
+        desc: c.weather[0].description, icon: c.weather[0].icon
+      };
+      renderHero(w);
+      renderClimaView(w, data.forecast);
+    } catch (err) {
+      console.warn("Weather error", err);
+      const demo = demoWeather(cityName);
+      renderHero(demo);
+      renderClimaView(demo, null);
+      svToast("⚠️ No se pudo conectar con OpenWeather, mostrando modo demo");
+    }
+  }
+
+  window.svRefreshWeather = function () {
+    if (lastCoords) loadWeather(lastCoords.lat, lastCoords.lon, lastCoords.name);
+  };
+
+  function requestGeolocation() {
+    if (!navigator.geolocation) {
+      lastCoords = { ...SV_CONFIG.DEFAULT_LOCATION };
+      loadWeather(lastCoords.lat, lastCoords.lon, lastCoords.name);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        lastCoords = { lat: pos.coords.latitude, lon: pos.coords.longitude, name: "Tu ubicación" };
+        loadWeather(lastCoords.lat, lastCoords.lon, lastCoords.name);
+      },
+      () => {
+        lastCoords = { ...SV_CONFIG.DEFAULT_LOCATION };
+        loadWeather(lastCoords.lat, lastCoords.lon, lastCoords.name);
+      },
+      { timeout: 8000 }
+    );
+  }
+
+  document.getElementById("citySelect").addEventListener("change", (e) => {
+    const val = e.target.value;
+    if (val === "auto") { requestGeolocation(); return; }
+    const [name, lat, lon] = val.split(",");
+    lastCoords = { lat: parseFloat(lat), lon: parseFloat(lon), name };
+    loadWeather(lastCoords.lat, lastCoords.lon, name);
+  });
+
+  document.addEventListener("DOMContentLoaded", requestGeolocation);
+})();
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — SV AI (Google Gemini API)
+   Reglas duras del prompt: responder en español, contexto SV,
+   NUNCA inventar info legal/gubernamental/de emergencia — remitir
+   a la fuente oficial cuando aplique.
+   ============================================================ */
+(function () {
+  "use strict";
+
+  const SYSTEM_PROMPT = `Eres SV AI, el asistente de la app SV Life para la vida cotidiana en El Salvador.
+Responde SIEMPRE en español, de forma breve, cálida y útil, con contexto salvadoreño (lugares, cultura, moneda USD, trámites, clima).
+REGLAS IMPORTANTES:
+- NUNCA inventes información legal, gubernamental, de trámites o de emergencia. Si no estás seguro o la información puede cambiar (requisitos, costos, leyes, números oficiales), dilo claramente y recomienda verificar en la fuente oficial correspondiente (ej. RNPN, Ministerio de Hacienda, PNC, DGME, VMT).
+- No des consejos médicos ni legales definitivos; orienta a buscar ayuda profesional u oficial.
+- Sé práctico y concreto (ej. sugerencias de lugares, rutas, actividades, presupuestos aproximados) pero deja claro cuándo un dato es aproximado.
+- Mantén las respuestas en un máximo de ~120 palabras salvo que se pida más detalle.`;
+
+  const SUGGESTIONS = [
+    "¿Qué puedo hacer este fin de semana en San Salvador?",
+    "¿Qué documentos necesito para sacar el DUI?",
+    "¿Cuánto gastaría de gasolina de San Salvador a Santa Ana?",
+    "Recomiéndame un lugar turístico cerca de la playa",
+    "¿Qué puedo hacer hoy en mi ciudad?"
+  ];
+
+  let history = svStore.get("sv_chat", []);
+  let initialized = false;
+
+  function bubble(role, text) {
+    const div = document.createElement("div");
+    div.className = "msg " + (role === "user" ? "user" : "ai");
+    div.textContent = text;
+    return div;
+  }
+
+  function renderHistory() {
+    const log = document.getElementById("chatLog");
+    log.innerHTML = "";
+    if (history.length === 0) {
+      log.appendChild(bubble("ai", "¡Hola! 👋 Soy SV AI. Pregúntame sobre trámites, turismo, clima, gastos o cualquier duda de la vida diaria en El Salvador."));
+    } else {
+      history.forEach(m => log.appendChild(bubble(m.role, m.text)));
+    }
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function renderSuggestions() {
+    const wrap = document.getElementById("chatSuggestions");
+    wrap.innerHTML = "";
+    SUGGESTIONS.forEach(s => {
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.textContent = s;
+      chip.addEventListener("click", () => sendMessage(s));
+      wrap.appendChild(chip);
+    });
+  }
+
+  function demoReply(question) {
+    const q = question.toLowerCase();
+    if (q.includes("dui")) {
+      return "Para el DUI necesitas hacer el trámite en el RNPN. Los requisitos exactos pueden cambiar, así que te recomiendo verificarlos en rnpn.gob.sv antes de ir. 🪪 (Respuesta en modo demo — configura tu clave de Gemini en Ajustes para respuestas completas.)";
+    }
+    if (q.includes("fin de semana") || q.includes("hacer hoy") || q.includes("turis")) {
+      return "Podrías visitar el Centro Histórico de San Salvador, la Puerta del Diablo o escaparte a la Ruta de las Flores (Juayúa, Ataco). 🌴 (Modo demo: activa tu clave de Gemini en Ajustes para recomendaciones personalizadas.)";
+    }
+    if (q.includes("gasolina") || q.includes("santa ana")) {
+      return "La distancia San Salvador–Santa Ana es de unos 65 km. Con un vehículo promedio (~35 km/galón) serían aprox. 2 galones, según el precio vigente del galón. Verifica el precio actual en surtidores oficiales. ⛽ (Modo demo)";
+    }
+    return "Estoy en modo demostración porque no hay una clave de Gemini configurada. Ve a Ajustes ⚙️ y agrega tu clave para obtener respuestas completas de SV AI. Mientras tanto: recuerda siempre verificar información legal, de trámites o de emergencia en fuentes oficiales. 🇸🇻";
+  }
+
+  async function callGeminiDirect(userText) {
+    const key = svGetKeys().gemini;
+    const model = SV_CONFIG.GEMINI_MODEL;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+    const contents = history.slice(-8).map(m => ({
+      role: m.role === "user" ? "user" : "model",
+      parts: [{ text: m.text }]
+    }));
+    contents.push({ role: "user", parts: [{ text: userText }] });
+    const body = {
+      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents
+    };
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error("Gemini API " + res.status);
+    const data = await res.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No obtuve respuesta, intenta de nuevo.";
+  }
+
+  async function callGeminiViaBackend(userText) {
+    const res = await fetch(SV_CONFIG.BACKEND_URL.replace(/\/$/, "") + "/gemini-proxy.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: userText, history: history.slice(-8) })
+    });
+    if (!res.ok) throw new Error("Backend " + res.status);
+    const data = await res.json();
+    return data.reply || "No obtuve respuesta, intenta de nuevo.";
+  }
+
+  async function sendMessage(text) {
+    text = text.trim();
+    if (!text) return;
+    const input = document.getElementById("chatInput");
+    input.value = "";
+    history.push({ role: "user", text });
+    renderHistory();
+    svStore.set("sv_chat", history);
+
+    const log = document.getElementById("chatLog");
+    const typing = document.createElement("div");
+    typing.className = "msg ai typing";
+    typing.innerHTML = "<span></span><span></span><span></span>";
+    log.appendChild(typing);
+    log.scrollTop = log.scrollHeight;
+
+    let reply;
+    try {
+      const keys = svGetKeys();
+      if (SV_CONFIG.BACKEND_URL) {
+        reply = await callGeminiViaBackend(text);
+      } else if (keys.gemini) {
+        reply = await callGeminiDirect(text);
+      } else {
+        await new Promise(r => setTimeout(r, 500));
+        reply = demoReply(text);
+      }
+    } catch (err) {
+      console.warn("SV AI error", err);
+      reply = "⚠️ No pude conectar con SV AI en este momento (revisa tu conexión o tu clave de Gemini en Ajustes). " + demoReply(text);
+    }
+
+    typing.remove();
+    history.push({ role: "ai", text: reply });
+    svStore.set("sv_chat", history);
+    renderHistory();
+  }
+
+  document.getElementById("chatSend").addEventListener("click", () => sendMessage(document.getElementById("chatInput").value));
+  document.getElementById("chatInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") sendMessage(e.target.value);
+  });
+
+  window.svInitChat = function () {
+    if (!initialized) {
+      renderSuggestions();
+      initialized = true;
+    }
+    renderHistory();
+  };
+})();
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — Mapa (Leaflet + OpenStreetMap, sin APIs de pago)
+   Búsqueda de lugares vía Nominatim; categorías rápidas vía
+   Overpass API (restaurantes, hospitales, gasolineras, etc.)
+   ============================================================ */
+(function () {
+  "use strict";
+
+  let map = null;
+  let markersLayer = null;
+  let userMarker = null;
+  let activeCat = "all";
+
+  const OVERPASS_TAGS = {
+    hospital: 'amenity=hospital',
+    restaurant: 'amenity=restaurant',
+    fuel: 'amenity=fuel',
+    bank: 'amenity=bank',
+    supermarket: 'shop=supermarket',
+    tourism: 'tourism=attraction'
+  };
+  const CAT_EMOJI = { hospital: "🏥", restaurant: "🍽️", fuel: "⛽", bank: "🏦", supermarket: "🛒", tourism: "🌴" };
+
+  function ensureMap() {
+    if (map) return;
+    const start = SV_CONFIG.DEFAULT_LOCATION;
+    map = L.map("map").setView([start.lat, start.lon], 12);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19
+    }).addTo(map);
+    markersLayer = L.layerGroup().addTo(map);
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const { latitude, longitude } = pos.coords;
+        map.setView([latitude, longitude], 14);
+        userMarker = L.circleMarker([latitude, longitude], {
+          radius: 8, color: "#1b5f83", fillColor: "#4fc3b6", fillOpacity: 0.9, weight: 2
+        }).addTo(map).bindPopup("📍 Estás aquí");
+      });
+    }
+  }
+
+  function clearMarkers() {
+    markersLayer.clearLayers();
+  }
+
+  function addMarker(lat, lon, title, emoji, extra) {
+    const icon = L.divIcon({
+      html: `<div style="font-size:22px; transform:translate(-50%,-100%);">${emoji}</div>`,
+      className: "", iconSize: [0, 0]
+    });
+    const m = L.marker([lat, lon], { icon }).addTo(markersLayer);
+    m.bindPopup(`<strong>${title}</strong>${extra ? "<br>" + extra : ""}`);
+    return m;
+  }
+
+  async function loadCategory(cat) {
+    ensureMap();
+    clearMarkers();
+    document.getElementById("mapResults").innerHTML = `<div class="spinner" style="margin:20px auto;"></div>`;
+    if (cat === "all") {
+      document.getElementById("mapResults").innerHTML = "";
+      return;
+    }
+    const center = map.getCenter();
+    const radius = 6000;
+    const tag = OVERPASS_TAGS[cat];
+    const query = `[out:json][timeout:15];node[${tag}](around:${radius},${center.lat},${center.lng});out 30;`;
+    try {
+      const res = await fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        body: "data=" + encodeURIComponent(query)
+      });
+      if (!res.ok) throw new Error("Overpass " + res.status);
+      const data = await res.json();
+      const emoji = CAT_EMOJI[cat] || "📍";
+      let listHtml = "";
+      (data.elements || []).forEach(el => {
+        const name = el.tags?.name || "Sin nombre";
+        addMarker(el.lat, el.lon, name, emoji);
+        listHtml += `<div class="list-item"><span>${emoji} ${name}</span></div>`;
+      });
+      document.getElementById("mapResults").innerHTML = listHtml
+        ? `<div class="panel">${listHtml}</div>`
+        : `<div class="empty-state"><span class="emoji">🔍</span>No se encontraron lugares cercanos en el mapa visible. Mueve o acerca el mapa e intenta de nuevo.</div>`;
+    } catch (err) {
+      console.warn("Overpass error", err);
+      document.getElementById("mapResults").innerHTML = `<div class="notice">⚠️ No se pudo consultar OpenStreetMap en este momento. Intenta de nuevo más tarde.</div>`;
+    }
+  }
+
+  async function searchPlace(q) {
+    if (!q.trim()) return;
+    document.getElementById("mapResults").innerHTML = `<div class="spinner" style="margin:20px auto;"></div>`;
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q + ", El Salvador")}&limit=8`;
+      const res = await fetch(url, { headers: { "Accept-Language": "es" } });
+      const data = await res.json();
+      ensureMap();
+      clearMarkers();
+      let html = "";
+      data.forEach(place => {
+        addMarker(parseFloat(place.lat), parseFloat(place.lon), place.display_name.split(",")[0], "📍");
+        html += `<div class="list-item" style="cursor:pointer;" data-lat="${place.lat}" data-lon="${place.lon}"><span>📍 ${place.display_name}</span></div>`;
+      });
+      document.getElementById("mapResults").innerHTML = html
+        ? `<div class="panel">${html}</div>`
+        : `<div class="empty-state"><span class="emoji">🔍</span>Sin resultados para "${q}".</div>`;
+      document.querySelectorAll("#mapResults .list-item[data-lat]").forEach(item => {
+        item.addEventListener("click", () => {
+          map.setView([parseFloat(item.dataset.lat), parseFloat(item.dataset.lon)], 15);
+        });
+      });
+      if (data[0]) map.setView([parseFloat(data[0].lat), parseFloat(data[0].lon)], 14);
+    } catch (err) {
+      console.warn("Nominatim error", err);
+      document.getElementById("mapResults").innerHTML = `<div class="notice">⚠️ No se pudo buscar en este momento. Revisa tu conexión.</div>`;
+    }
+  }
+
+  document.getElementById("mapFilters").addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    document.querySelectorAll("#mapFilters .chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    activeCat = chip.dataset.cat;
+    loadCategory(activeCat);
+  });
+
+  document.getElementById("mapSearchBtn").addEventListener("click", () => searchPlace(document.getElementById("mapSearch").value));
+  document.getElementById("mapSearch").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") searchPlace(e.target.value);
+  });
+
+  window.svInitMap = function () {
+    ensureMap();
+    setTimeout(() => map.invalidateSize(), 150);
+  };
+})();
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — Trámites
+   ============================================================ */
+(function () {
+  "use strict";
+  function render() {
+    const el = document.getElementById("tramitesList");
+    el.innerHTML = SV_TRAMITES.map(t => `
+      <div class="panel">
+        <div class="flex-between">
+          <strong style="font-size:15px;">${t.emoji} ${t.nombre}</strong>
+        </div>
+        <p class="text-dim mt-8" style="font-size:13px;">${t.que_es}</p>
+        <p style="font-size:13px; margin-top:6px;"><strong>¿Para qué sirve?</strong> ${t.para_que}</p>
+        <p style="font-size:13px; margin-top:6px;"><strong>Institución:</strong> ${t.institucion}</p>
+        ${t.verificar ? `<div class="notice">📌 Requisitos, pasos y costos pueden cambiar. Verifica la información oficial antes de tu trámite.</div>` : ""}
+        <a href="${t.enlace}" target="_blank" rel="noopener"><button class="btn secondary full mt-16">🔗 Ir al sitio oficial</button></a>
+      </div>
+    `).join("");
+  }
+  document.addEventListener("DOMContentLoaded", render);
+})();
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — Emergencias
+   Los números salen SIEMPRE de SV_CONFIG.EMERGENCY_NUMBERS
+   (js/config.js) — nunca se inventan aquí.
+   ============================================================ */
+(function () {
+  "use strict";
+  function render() {
+    const el = document.getElementById("emergenciasGrid");
+    el.innerHTML = SV_CONFIG.EMERGENCY_NUMBERS.map(n => `
+      <div class="emg-card" data-tel="${n.number}">
+        <span class="emoji">${n.emoji}</span>
+        <strong>${n.label}</strong>
+        <span class="num">${n.number}</span>
+      </div>
+    `).join("");
+    el.querySelectorAll(".emg-card").forEach(card => {
+      card.addEventListener("click", () => {
+        window.location.href = "tel:" + card.dataset.tel.replace(/[^0-9+]/g, "");
+      });
+    });
+  }
+  document.addEventListener("DOMContentLoaded", render);
+})();
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — Dinero / gastos
+   ============================================================ */
+(function () {
+  "use strict";
+  const KEY = "sv_gastos";
+  const BKEY = "sv_budget";
+
+  function isThisMonth(dateStr) {
+    const d = new Date(dateStr);
+    const n = new Date();
+    return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
+  }
+
+  function render() {
+    const gastos = svStore.get(KEY, []);
+    const mesActual = gastos.filter(g => isThisMonth(g.fecha));
+    const total = mesActual.reduce((s, g) => s + g.monto, 0);
+    document.getElementById("totalMes").textContent = svFmtUSD(total);
+    document.getElementById("miniGastos").textContent = svFmtUSD(total) + " este mes";
+
+    const budget = svStore.get(BKEY, { amount: 0 });
+    const bar = document.getElementById("budgetBar");
+    if (budget.amount > 0) {
+      const pct = Math.min(100, Math.round((total / budget.amount) * 100));
+      const over = total > budget.amount;
+      bar.innerHTML = `
+        <div style="height:8px; background:var(--bg-sunken); border-radius:99px; overflow:hidden; margin-top:6px;">
+          <div style="height:100%; width:${pct}%; background:${over ? "var(--danger)" : "var(--accent-2)"};"></div>
+        </div>
+        <small class="text-dim">${svFmtUSD(total)} de ${svFmtUSD(budget.amount)} presupuestados ${over ? "⚠️ superado" : ""}</small>`;
+    } else {
+      bar.innerHTML = `<small class="text-dim">No has definido un presupuesto mensual.</small>`;
+    }
+
+    const list = document.getElementById("gastosList");
+    if (gastos.length === 0) {
+      list.innerHTML = `<div class="empty-state"><span class="emoji">💵</span>Aún no has registrado gastos.</div>`;
+      return;
+    }
+    list.innerHTML = `<div class="panel">` + gastos.slice(0, 40).map(g => `
+      <div class="list-item">
+        <div>
+          <strong style="font-size:13.5px;">${g.categoria}</strong><br>
+          <small class="text-dim">${g.desc || "Sin descripción"} · ${new Date(g.fecha).toLocaleDateString("es-SV")}</small>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <strong>${svFmtUSD(g.monto)}</strong>
+          <button class="icon-btn" style="width:30px;height:30px;font-size:13px;" data-del="${g.id}">✕</button>
+        </div>
+      </div>`).join("") + `</div>`;
+
+    list.querySelectorAll("[data-del]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        svStore.remove(KEY, btn.dataset.del);
+        render();
+        svToast("Gasto eliminado");
+      });
+    });
+  }
+
+  document.getElementById("formGasto").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const monto = parseFloat(document.getElementById("gastoMonto").value);
+    if (!monto || monto <= 0) { svToast("Ingresa un monto válido"); return; }
+    svStore.push(KEY, {
+      id: svUid(),
+      monto,
+      categoria: document.getElementById("gastoCategoria").value,
+      desc: document.getElementById("gastoDesc").value.trim(),
+      fecha: new Date().toISOString()
+    });
+    e.target.reset();
+    render();
+    svToast("Gasto registrado ✅");
+  });
+
+  document.getElementById("btnPresupuesto").addEventListener("click", () => {
+    const current = svStore.get(BKEY, { amount: 0 }).amount;
+    const val = prompt("Presupuesto mensual (USD):", current || "");
+    if (val === null) return;
+    const num = parseFloat(val);
+    if (isNaN(num) || num < 0) { svToast("Monto inválido"); return; }
+    svStore.set(BKEY, { amount: num });
+    render();
+  });
+
+  document.addEventListener("DOMContentLoaded", render);
+  window.svRenderDinero = render;
+})();
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — Combustible
+   ============================================================ */
+(function () {
+  "use strict";
+  const KEY = "sv_fuel";
+
+  function isThisMonth(dateStr) {
+    const d = new Date(dateStr);
+    const n = new Date();
+    return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
+  }
+
+  function render() {
+    const regs = svStore.get(KEY, []).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    const mes = regs.filter(r => isThisMonth(r.fecha));
+    const gastoMes = mes.reduce((s, r) => s + r.precio * r.galones, 0);
+    const promPrecio = regs.length ? regs.reduce((s, r) => s + r.precio, 0) / regs.length : 0;
+
+    document.getElementById("fuelMes").textContent = svFmtUSD(gastoMes);
+    document.getElementById("fuelProm").textContent = svFmtUSD(promPrecio);
+
+    let rendimiento = "—";
+    const conKm = regs.filter(r => r.km).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+    if (conKm.length >= 2) {
+      const diffKm = conKm[conKm.length - 1].km - conKm[0].km;
+      const totalGal = conKm.slice(1).reduce((s, r) => s + r.galones, 0);
+      if (totalGal > 0 && diffKm > 0) rendimiento = (diffKm / totalGal).toFixed(1) + " km/gal";
+    }
+    document.getElementById("fuelRend").textContent = rendimiento;
+
+    const chart = document.getElementById("fuelChart");
+    if (regs.length === 0) {
+      chart.innerHTML = "";
+    } else {
+      const last6 = regs.slice(0, 6).reverse();
+      const max = Math.max(...last6.map(r => r.precio * r.galones), 1);
+      chart.innerHTML = `<small class="text-dim">Últimos registros (USD gastados)</small>
+        <div style="display:flex; align-items:flex-end; gap:8px; height:100px; margin-top:10px;">
+          ${last6.map(r => {
+            const total = r.precio * r.galones;
+            const h = Math.max(6, Math.round((total / max) * 90));
+            return `<div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
+              <div style="width:100%; height:${h}px; background:linear-gradient(180deg,var(--accent-2),var(--primary)); border-radius:6px 6px 0 0;"></div>
+              <small style="font-size:10px;">${svFmtUSD(total)}</small>
+            </div>`;
+          }).join("")}
+        </div>`;
+    }
+
+    const list = document.getElementById("fuelList");
+    if (regs.length === 0) {
+      list.innerHTML = `<div class="empty-state"><span class="emoji">⛽</span>Aún no has registrado compras de combustible.</div>`;
+      return;
+    }
+    list.innerHTML = `<div class="panel">` + regs.slice(0, 30).map(r => `
+      <div class="list-item">
+        <div>
+          <strong style="font-size:13.5px;">${r.vehiculo || "Vehículo"}</strong><br>
+          <small class="text-dim">${r.galones} gal · ${svFmtUSD(r.precio)}/gal · ${new Date(r.fecha).toLocaleDateString("es-SV")}</small>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <strong>${svFmtUSD(r.precio * r.galones)}</strong>
+          <button class="icon-btn" style="width:30px;height:30px;font-size:13px;" data-del="${r.id}">✕</button>
+        </div>
+      </div>`).join("") + `</div>`;
+
+    list.querySelectorAll("[data-del]").forEach(btn => {
+      btn.addEventListener("click", () => { svStore.remove(KEY, btn.dataset.del); render(); svToast("Registro eliminado"); });
+    });
+  }
+
+  document.getElementById("formGasolina").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const precio = parseFloat(document.getElementById("fPrecio").value);
+    const galones = parseFloat(document.getElementById("fGalones").value);
+    if (!precio || !galones) { svToast("Completa precio y galones"); return; }
+    svStore.push(KEY, {
+      id: svUid(),
+      precio, galones,
+      km: parseFloat(document.getElementById("fKm").value) || null,
+      vehiculo: document.getElementById("fVehiculo").value.trim(),
+      fecha: document.getElementById("fFecha").value ? new Date(document.getElementById("fFecha").value).toISOString() : new Date().toISOString()
+    });
+    e.target.reset();
+    render();
+    svToast("Registrado ⛽");
+  });
+
+  document.addEventListener("DOMContentLoaded", render);
+})();
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — Mi día (calendario simple)
+   ============================================================ */
+(function () {
+  "use strict";
+  const KEY = "sv_eventos";
+  const TIPO_ICON = { evento: "📌", tarea: "✅", recordatorio: "⏰" };
+
+  function render() {
+    const eventos = svStore.get(KEY, []).slice().sort((a, b) =>
+      new Date(a.fecha + "T" + a.hora) - new Date(b.fecha + "T" + b.hora)
+    );
+    const hoy = new Date().toISOString().slice(0, 10);
+    const eventosHoy = eventos.filter(e => e.fecha === hoy);
+    document.getElementById("miniEventos").textContent = eventosHoy.length
+      ? `${eventosHoy.length} evento(s) hoy` : "Sin eventos hoy";
+
+    const list = document.getElementById("eventosList");
+    const futuros = eventos.filter(e => e.fecha >= hoy);
+    if (futuros.length === 0) {
+      list.innerHTML = `<div class="empty-state"><span class="emoji">📅</span>No tienes eventos próximos.</div>`;
+      return;
+    }
+    list.innerHTML = `<div class="panel">` + futuros.map(e => `
+      <div class="list-item">
+        <div>
+          <strong style="font-size:13.5px;">${TIPO_ICON[e.tipo] || "📌"} ${e.titulo}</strong><br>
+          <small class="text-dim">${new Date(e.fecha).toLocaleDateString("es-SV", { weekday:"short", day:"numeric", month:"short" })} · ${e.hora}</small>
+        </div>
+        <button class="icon-btn" style="width:30px;height:30px;font-size:13px;" data-del="${e.id}">✕</button>
+      </div>`).join("") + `</div>`;
+
+    list.querySelectorAll("[data-del]").forEach(btn => {
+      btn.addEventListener("click", () => { svStore.remove(KEY, btn.dataset.del); render(); svToast("Eliminado"); });
+    });
+  }
+
+  document.getElementById("formEvento").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const titulo = document.getElementById("evTitulo").value.trim();
+    const fecha = document.getElementById("evFecha").value;
+    const hora = document.getElementById("evHora").value;
+    if (!titulo || !fecha || !hora) { svToast("Completa todos los campos"); return; }
+    svStore.push(KEY, { id: svUid(), titulo, fecha, hora, tipo: document.getElementById("evTipo").value });
+    e.target.reset();
+    render();
+    svToast("Evento agregado ✅");
+  });
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    document.getElementById("evFecha").value = today;
+    render();
+  });
+})();
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — Descubre El Salvador (turismo)
+   ============================================================ */
+(function () {
+  "use strict";
+
+  function placeCard(p, mini) {
+    return `
+      <div class="${mini ? "place-card" : "card"}" style="${mini ? "" : "min-height:auto;"}">
+        <div class="${mini ? "img" : "emoji"}">${p.emoji}</div>
+        <div class="${mini ? "body" : ""}">
+          <strong>${p.nombre}</strong>
+          ${mini ? `<small>${p.desc}</small>` : `<small>${p.desc}</small>`}
+          <button class="btn sm secondary mt-8" data-lat="${p.lat}" data-lon="${p.lon}" data-name="${p.nombre}">🗺️ Ver mapa</button>
+        </div>
+      </div>`;
+  }
+
+  function renderPreview() {
+    const el = document.getElementById("turismoPreview");
+    if (!el) return;
+    el.innerHTML = SV_TURISMO.slice(0, 6).map(p => placeCard(p, true)).join("");
+    bindMapButtons(el);
+  }
+
+  function renderGrid(cat) {
+    const el = document.getElementById("turismoGrid");
+    const items = cat === "all" ? SV_TURISMO : SV_TURISMO.filter(p => p.cat === cat);
+    el.innerHTML = items.map(p => placeCard(p, false)).join("");
+    bindMapButtons(el);
+  }
+
+  function bindMapButtons(container) {
+    container.querySelectorAll("[data-lat]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        window.svGoTo("mapa");
+        setTimeout(() => {
+          if (window.svInitMap) window.svInitMap();
+        }, 50);
+      });
+    });
+  }
+
+  document.getElementById("turismoFilters").addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    document.querySelectorAll("#turismoFilters .chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    renderGrid(chip.dataset.cat);
+  });
+
+  document.addEventListener("DOMContentLoaded", () => {
+    renderPreview();
+    renderGrid("all");
+  });
+})();
+
+</script>
+<script>
+/* ============================================================
+   SV LIFE — Actualidad (demo)
+   Para conectar una API real: reemplaza SV_NOTICIAS_DEMO por
+   una función async que haga fetch a tu proveedor de noticias
+   y llama a renderNoticias(datos) con el mismo formato.
+   ============================================================ */
+(function () {
+  "use strict";
+
+  function card(n) {
+    return `
+      <div class="panel">
+        <div class="flex-between">
+          <strong style="font-size:14px;">${n.titulo}</strong>
+          ${n.demo ? `<span class="badge warn">Demo</span>` : ""}
+        </div>
+        <p class="text-dim mt-8" style="font-size:13px;">${n.resumen}</p>
+        <small class="text-dim">${n.fuente}</small>
+      </div>`;
+  }
+
+  function render() {
+    document.getElementById("noticiasList").innerHTML = SV_NOTICIAS_DEMO.map(card).join("");
+    document.getElementById("noticiasPreview").innerHTML = SV_NOTICIAS_DEMO.slice(0, 1).map(card).join("");
+  }
+
+  document.addEventListener("DOMContentLoaded", render);
+})();
+
+</script>
+</body>
+</html>
