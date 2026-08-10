@@ -94,8 +94,10 @@ button{font-family:var(--font-body);}
   display:flex; align-items:center; justify-content:space-between;
   padding:18px 18px 6px;
 }
-.topbar .brand{display:flex; align-items:center; gap:8px; font-family:var(--font-display); font-weight:700; font-size:20px;}
+.topbar .brand{display:flex; align-items:center; gap:9px; font-family:var(--font-display); font-weight:700; font-size:20px;}
 .topbar .brand .flag{font-size:20px;}
+.topbar .brand .brand-logo{width:30px; height:30px; border-radius:9px; box-shadow:var(--shadow); display:block;}
+#installBtnTop.hide{display:none;}
 .icon-btn{
   width:40px; height:40px; border-radius:50%; border:1px solid var(--border);
   background:var(--bg-elevated); display:flex; align-items:center; justify-content:center;
@@ -291,14 +293,20 @@ body.is-offline .offline-banner{display:block;}
 .install-banner span{font-size:12px; color:var(--text-dim);}
 .install-banner button{flex-shrink:0;}
 
-/* ---------- Marca de agua ---------- */
-.watermark{
-  position:fixed; right:10px; bottom:calc(var(--nav-h) + 8px); z-index:40;
-  font-family:var(--font-display); font-size:10.5px; font-weight:600; letter-spacing:.02em;
-  color:var(--text-dim); opacity:.55; background:var(--bg-elevated);
-  border:1px solid var(--border); padding:3px 9px; border-radius:99px; pointer-events:none;
-  box-shadow:var(--shadow);
+/* ---------- Créditos (marca de agua) ---------- */
+.credits-badge{
+  position:fixed; right:12px; bottom:calc(var(--nav-h) + 10px); z-index:40;
+  display:flex; align-items:center; gap:6px;
+  font-family:var(--font-display); font-size:10.5px; font-weight:700; letter-spacing:.01em;
+  color:var(--text); opacity:.88; background:var(--bg-elevated);
+  border:1px solid var(--border); padding:4px 10px 4px 4px; border-radius:99px;
+  box-shadow:var(--shadow); text-decoration:none; cursor:default;
+  transition:opacity .2s ease, transform .15s ease;
 }
+.credits-badge:active{transform:scale(.96);}
+.credits-badge img{width:20px; height:20px; border-radius:50%; display:block; box-shadow:0 0 0 1px rgba(0,0,0,.06);}
+.credits-badge .cb-label{color:var(--text-dim); font-weight:500; font-size:10px;}
+.credits-badge .cb-name{background:linear-gradient(135deg,var(--sv-teal-500),var(--sv-anil-500)); -webkit-background-clip:text; background-clip:text; color:transparent;}
 
 /* ---------- misc utility ---------- */
 .text-dim{color:var(--text-dim);}
@@ -315,8 +323,12 @@ body.is-offline .offline-banner{display:block;}
 
   <!-- ============ TOP BAR ============ -->
   <div class="topbar">
-    <div class="brand"><span class="flag">🇸🇻</span> SV Life</div>
+    <div class="brand">
+      <img src="assets/icons/icon-192.png" alt="SV Life" class="brand-logo">
+      SV Life
+    </div>
     <div class="topbar-actions">
+      <button class="icon-btn" id="installBtnTop" title="Instalar app">📲</button>
       <button class="icon-btn" id="themeToggle" title="Cambiar tema">🌙</button>
       <button class="icon-btn" id="settingsBtn" title="Ajustes">⚙️</button>
     </div>
@@ -593,7 +605,10 @@ body.is-offline .offline-banner{display:block;}
 
 </div>
 
-<div class="watermark">IvanMartinez</div>
+<div class="credits-badge" title="Diseñado y desarrollado por IvanMartinez">
+  <img src="assets/icons/icon-192.png" alt="SV Life">
+  <span class="cb-label">Hecho por</span>&nbsp;<span class="cb-name">IvanMartinez</span>
+</div>
 
 <!-- ============ BOTTOM NAV ============ -->
 <nav class="bottom-nav">
@@ -960,6 +975,7 @@ function svFmtUSD(n) {
   function hideInstallUI() {
     document.getElementById("installBanner").classList.remove("show");
     document.getElementById("installPanel").style.display = "none";
+    document.getElementById("installBtnTop").classList.add("hide");
   }
 
   window.addEventListener("beforeinstallprompt", (e) => {
@@ -990,6 +1006,13 @@ function svFmtUSD(n) {
 
   document.getElementById("installBtn").addEventListener("click", window.svTriggerInstall);
   document.getElementById("installBtnSettings").addEventListener("click", window.svTriggerInstall);
+  document.getElementById("installBtnTop").addEventListener("click", window.svTriggerInstall);
+
+  // El botón de instalar en la barra superior siempre está disponible,
+  // salvo que la app ya esté corriendo instalada (modo standalone).
+  if (isStandalone()) {
+    document.getElementById("installBtnTop").classList.add("hide");
+  }
 
   // En iOS no existe beforeinstallprompt: mostramos igual la opción con instrucciones manuales
   if (isIOS() && !isStandalone()) {
